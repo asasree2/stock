@@ -728,21 +728,90 @@ tbody td { padding: 13px 18px; font-size: 13px; }
   <!-- Reports -->
   <div class="page" id="page-reports">
     <div class="page-header">
-      <div><div class="page-title">รายงาน</div><div class="page-sub">สรุปข้อมูลสต๊อกสินค้า</div></div>
-      <button class="btn btn-outline" onclick="printReport()">🖨️ พิมพ์รายงาน</button>
+      <div><div class="page-title">รายงาน & กำไร</div><div class="page-sub">สรุปรายได้ ค่าใช้จ่าย และกำไรที่แท้จริง</div></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" onclick="openExpenseModal()">+ บันทึกค่าใช้จ่าย</button>
+        <button class="btn btn-outline" onclick="printReport()">🖨️ พิมพ์</button>
+      </div>
     </div>
-    <div class="stats" style="grid-template-columns:repeat(3,1fr)">
-      <div class="stat-card"><div class="stat-label">มูลค่าสต๊อกรวม</div><div class="stat-val" id="rep-totalval">0</div><div class="stat-sub">บาท</div></div>
-      <div class="stat-card"><div class="stat-label">กำไรคาดการณ์</div><div class="stat-val good" id="rep-profit">0</div><div class="stat-sub">บาท (ขายหมดทั้งหมด)</div></div>
-      <div class="stat-card"><div class="stat-label">หมวดหมู่ที่มีมากสุด</div><div class="stat-val" id="rep-topcat" style="font-size:16px;padding-top:4px;">-</div><div class="stat-sub">รายการ</div></div>
+
+    <!-- Period selector -->
+    <div style="display:flex;gap:8px;margin-bottom:20px;align-items:center">
+      <span style="font-size:13px;font-weight:700;color:var(--text2)">ช่วงเวลา:</span>
+      <button class="cat-pill active" id="period-today" onclick="setPeriod('today')">วันนี้</button>
+      <button class="cat-pill" id="period-month" onclick="setPeriod('month')">เดือนนี้</button>
+      <button class="cat-pill" id="period-all" onclick="setPeriod('all')">ทั้งหมด</button>
     </div>
-    <div class="charts-grid" style="grid-template-columns:1fr;">
-      <div class="chart-card"><div class="chart-title">มูลค่าสต๊อกตามหมวดหมู่ (บาท)</div><canvas id="chart-value"></canvas></div>
+
+    <!-- Stat cards -->
+    <div class="stats" style="grid-template-columns:repeat(5,1fr);margin-bottom:24px">
+      <div class="stat-card">
+        <div class="stat-icon">💰</div>
+        <div class="stat-label">ยอดขาย</div>
+        <div class="stat-val" id="rep-revenue">0</div>
+        <div class="stat-sub">บาท</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">📦</div>
+        <div class="stat-label">ต้นทุนสินค้า</div>
+        <div class="stat-val danger" id="rep-cogs">0</div>
+        <div class="stat-sub">บาท</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🧾</div>
+        <div class="stat-label">ค่าใช้จ่ายอื่นๆ</div>
+        <div class="stat-val warn" id="rep-expenses">0</div>
+        <div class="stat-sub">บาท</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">📊</div>
+        <div class="stat-label">กำไรขั้นต้น</div>
+        <div class="stat-val good" id="rep-gross">0</div>
+        <div class="stat-sub">ยอดขาย − ต้นทุน</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">✨</div>
+        <div class="stat-label">กำไรสุทธิ</div>
+        <div class="stat-val good" id="rep-net">0</div>
+        <div class="stat-sub">หลังหักค่าใช้จ่าย</div>
+      </div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-title">📈 รายได้ vs ค่าใช้จ่าย</div>
+        <canvas id="chart-profit"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">🧾 ค่าใช้จ่ายตามหมวด</div>
+        <canvas id="chart-expense-cat"></canvas>
+      </div>
+    </div>
+
+    <!-- Expenses table -->
+    <div class="table-wrap" style="margin-bottom:20px">
+      <div class="table-toolbar">
+        <span style="font-size:13px;font-weight:700">รายการค่าใช้จ่าย</span>
+        <span id="expense-period-label" style="font-size:12px;color:var(--text3)"></span>
+      </div>
+      <table>
+        <thead><tr><th>วันที่</th><th>รายการ</th><th>หมวดหมู่</th><th>จำนวนเงิน</th><th>หมายเหตุ</th><th>จัดการ</th></tr></thead>
+        <tbody id="expense-table"></tbody>
+      </table>
+    </div>
+
+    <!-- Stock value -->
+    <div class="charts-grid" style="grid-template-columns:1fr">
+      <div class="chart-card">
+        <div class="chart-title">มูลค่าสต๊อกตามหมวดหมู่ (บาท)</div>
+        <canvas id="chart-value"></canvas>
+      </div>
     </div>
     <div class="table-wrap">
-      <div class="table-toolbar"><span style="font-size:13px;font-weight:600;">รายการสินค้าทั้งหมด</span></div>
+      <div class="table-toolbar"><span style="font-size:13px;font-weight:700">รายการสินค้าทั้งหมด</span>
+      <span id="rep-topcat-label" style="font-size:12px;color:var(--text3)"></span></div>
       <table>
-        <thead><tr><th>รหัส</th><th>ชื่อสินค้า</th><th>หมวดหมู่</th><th>คงเหลือ</th><th>ราคาต้นทุน</th><th>มูลค่าสต๊อก</th><th>กำไรต่อหน่วย</th></tr></thead>
+        <thead><tr><th>รหัส</th><th>ชื่อสินค้า</th><th>หมวดหมู่</th><th>คงเหลือ</th><th>ต้นทุน/ชิ้น</th><th>ราคาขาย</th><th>กำไร/ชิ้น</th><th>มูลค่าสต๊อก</th></tr></thead>
         <tbody id="report-table"></tbody>
       </table>
     </div>
@@ -1082,77 +1151,166 @@ function checkout() {
 // ---- Receipt functions ----
 function buildReceiptHTML(data, forPrint=false) {
   const s = storeSettings;
-  const lineH = forPrint ? '' : '';
+  const shipping  = Number(data.shipping||0);
+  const discount  = Number(data.discount||0);
+  const vatPct    = Number(data.vat||0);
+  const platformFeePct = Number(data.platformFee||0);
+  const subtotal  = data.totalPrice;
+  const afterDiscount = subtotal + shipping - discount;
+  const vatAmt    = Math.round(afterDiscount * vatPct / 100);
+  const grandTotal = afterDiscount + vatAmt;
+  const gpAmt     = data.platform && platformFeePct>0 ? Math.round(subtotal * platformFeePct / 100) : 0;
+  const netProfit = grandTotal - gpAmt;
+
   return `
-  <div style="font-family:'Noto Sans Thai',sans-serif;color:#111;max-width:380px;margin:0 auto;${forPrint?'padding:0':''}">
-    <!-- Header -->
-    <div style="text-align:center;padding-bottom:16px;border-bottom:2px solid #111;margin-bottom:16px">
-      <div style="font-size:22px;font-weight:900;letter-spacing:-0.5px;text-transform:uppercase">${s.name}</div>
-      ${s.address?`<div style="font-size:12px;color:#555;margin-top:3px">${s.address}</div>`:''}
-      ${s.phone?`<div style="font-size:12px;color:#555">โทร: ${s.phone}</div>`:''}
-      ${s.taxId?`<div style="font-size:12px;color:#555">เลขผู้เสียภาษี: ${s.taxId}</div>`:''}
-      <div style="font-size:14px;font-weight:700;margin-top:10px;text-transform:uppercase;letter-spacing:2px">ใบเสร็จรับเงิน</div>
+  <div style="font-family:'Noto Sans Thai',sans-serif;color:#111;max-width:360px;margin:0 auto;font-size:13px">
+    <!-- Store Header -->
+    <div style="text-align:center;padding-bottom:14px;border-bottom:2px solid #111;margin-bottom:14px">
+      <div style="font-size:20px;font-weight:900;letter-spacing:-0.5px;text-transform:uppercase">${s.name}</div>
+      ${s.address?`<div style="font-size:11px;color:#555;margin-top:2px">${s.address}</div>`:''}
+      ${s.phone?`<div style="font-size:11px;color:#555">โทร: ${s.phone}</div>`:''}
+      ${s.taxId?`<div style="font-size:11px;color:#555">เลขผู้เสียภาษี: ${s.taxId}</div>`:''}
+      ${data.platform?`<div style="margin-top:6px;display:inline-block;padding:2px 10px;background:#111;color:#fff;font-size:11px;font-weight:700;letter-spacing:.04em">${data.platform}</div>`:''}
+      <div style="font-size:13px;font-weight:800;margin-top:8px;text-transform:uppercase;letter-spacing:2px">ใบเสร็จรับเงิน</div>
     </div>
 
-    <!-- Receipt Info -->
-    <div style="display:flex;justify-content:space-between;font-size:12px;color:#555;margin-bottom:16px">
+    <!-- Receipt & Customer Info -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;font-size:11px">
       <div>
-        <div>เลขที่: <strong style="color:#111;font-family:monospace">${data.no}</strong></div>
-        <div>ผู้ขาย: <strong style="color:#111">${data.seller}</strong></div>
+        <div style="color:#888">เลขที่</div>
+        <div style="font-weight:700;font-family:monospace">${data.no}</div>
+        <div style="color:#888;margin-top:4px">วันที่</div>
+        <div>${data.date} ${data.time}</div>
+        <div style="color:#888;margin-top:4px">ผู้ขาย</div>
+        <div>${data.seller}</div>
+        ${data.tracking?`<div style="color:#888;margin-top:4px">เลขพัสดุ</div><div style="font-weight:700;font-family:monospace">${data.tracking}</div>`:''}
       </div>
-      <div style="text-align:right">
-        <div>${data.date}</div>
-        <div>${data.time}</div>
+      <div>
+        ${data.customerName?`<div style="color:#888">ลูกค้า</div><div style="font-weight:700">${data.customerName}</div>`:''}
+        ${data.customerPhone?`<div style="color:#888;margin-top:4px">โทร</div><div>${data.customerPhone}</div>`:''}
+        ${data.customerAddr?`<div style="color:#888;margin-top:4px">ที่อยู่</div><div style="line-height:1.5">${data.customerAddr.replace(/\n/g,'<br>')}</div>`:''}
       </div>
     </div>
 
     <!-- Items -->
-    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px">
       <thead>
         <tr style="border-bottom:1px solid #111">
-          <th style="text-align:left;padding:6px 0;font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:800">รายการ</th>
-          <th style="text-align:center;padding:6px 0;font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:800">จำนวน</th>
-          <th style="text-align:right;padding:6px 0;font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:800">ราคา</th>
-          <th style="text-align:right;padding:6px 0;font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:800">รวม</th>
+          <th style="text-align:left;padding:5px 0;font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:800">รายการ</th>
+          <th style="text-align:center;padding:5px 0;font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:800">จน.</th>
+          <th style="text-align:right;padding:5px 0;font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:800">ราคา</th>
+          <th style="text-align:right;padding:5px 0;font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:800">รวม</th>
         </tr>
       </thead>
       <tbody>
         ${data.items.map(item=>`
           <tr style="border-bottom:1px solid #eee">
-            <td style="padding:8px 0">
+            <td style="padding:6px 0">
               <div style="font-weight:600">${item.name}</div>
-              <div style="font-size:11px;color:#888;font-family:monospace">${item.id}</div>
+              <div style="font-size:10px;color:#888;font-family:monospace">${item.id}</div>
             </td>
-            <td style="text-align:center;padding:8px 0;font-family:monospace">${item.qty}</td>
-            <td style="text-align:right;padding:8px 0;font-family:monospace">${fmtNum(item.price)}</td>
-            <td style="text-align:right;padding:8px 0;font-family:monospace;font-weight:700">${fmtNum(item.subtotal)}</td>
+            <td style="text-align:center;padding:6px 0;font-family:monospace">${item.qty}</td>
+            <td style="text-align:right;padding:6px 0;font-family:monospace">${fmtNum(item.price)}</td>
+            <td style="text-align:right;padding:6px 0;font-family:monospace;font-weight:700">${fmtNum(item.subtotal)}</td>
           </tr>`).join('')}
       </tbody>
     </table>
 
-    <!-- Total -->
-    <div style="border-top:2px solid #111;padding-top:12px;margin-bottom:16px">
-      <div style="display:flex;justify-content:space-between;font-size:13px;color:#555;margin-bottom:4px">
-        <span>จำนวนสินค้า</span>
-        <span style="font-family:monospace">${data.totalItems} ชิ้น</span>
+    <!-- Totals -->
+    <div style="border-top:1px solid #ddd;padding-top:10px;margin-bottom:12px;font-size:12px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px;color:#555">
+        <span>ยอดรวมสินค้า (${data.totalItems} ชิ้น)</span>
+        <span style="font-family:monospace">฿${fmtNum(subtotal)}</span>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:20px;font-weight:900;margin-top:8px">
-        <span style="text-transform:uppercase;letter-spacing:-.3px">ยอดรวม</span>
-        <span style="font-family:monospace">฿${fmtNum(data.totalPrice)}</span>
+      ${shipping>0?`<div style="display:flex;justify-content:space-between;margin-bottom:4px;color:#555">
+        <span>ค่าจัดส่ง</span><span style="font-family:monospace">+฿${fmtNum(shipping)}</span></div>`:''}
+      ${discount>0?`<div style="display:flex;justify-content:space-between;margin-bottom:4px;color:#c0392b">
+        <span>ส่วนลด</span><span style="font-family:monospace">−฿${fmtNum(discount)}</span></div>`:''}
+      ${vatPct>0?`<div style="display:flex;justify-content:space-between;margin-bottom:4px;color:#555">
+        <span>VAT ${vatPct}%</span><span style="font-family:monospace">+฿${fmtNum(vatAmt)}</span></div>`:''}
+      <div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:2px solid #111;font-size:17px;font-weight:900">
+        <span style="text-transform:uppercase;letter-spacing:-.3px">ยอดสุทธิ</span>
+        <span style="font-family:monospace">฿${fmtNum(grandTotal)}</span>
       </div>
+      ${gpAmt>0?`<div style="margin-top:8px;padding:6px 10px;background:#fff3cd;border:1px solid #ffc107;font-size:11px">
+        <div style="font-weight:700;color:#856404">ค่า GP ${data.platform} (${platformFeePct}%)</div>
+        <div style="display:flex;justify-content:space-between;color:#856404">
+          <span>หักค่าธรรมเนียม</span><span style="font-family:monospace">−฿${fmtNum(gpAmt)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-weight:700;color:#155724;margin-top:4px;padding-top:4px;border-top:1px solid #ffc107">
+          <span>รายได้สุทธิ</span><span style="font-family:monospace">฿${fmtNum(netProfit)}</span>
+        </div>
+      </div>`:''}
     </div>
 
+    <!-- Note -->
+    ${data.note?`<div style="padding:8px 10px;background:#f8f8f8;border-left:3px solid #111;font-size:11px;color:#555;margin-bottom:12px"><strong>หมายเหตุ:</strong> ${data.note}</div>`:''}
+
     <!-- Footer -->
-    <div style="text-align:center;border-top:1px solid #ddd;padding-top:14px">
-      <div style="font-size:14px;font-weight:700">${s.thankMsg}</div>
-      <div style="font-size:11px;color:#999;margin-top:4px">${data.no}</div>
+    <div style="text-align:center;border-top:1px solid #ddd;padding-top:12px">
+      <div style="font-size:13px;font-weight:700">${s.thankMsg}</div>
+      <div style="font-size:10px;color:#aaa;margin-top:4px;font-family:monospace">${data.no}</div>
     </div>
   </div>`;
 }
 
 function showReceipt(data) {
-  document.getElementById('receipt-content').innerHTML = buildReceiptHTML(data);
+  lastReceiptData = data;
+  // Reset edit fields
+  document.getElementById('rc-customer-name').value = data.customerName||'';
+  document.getElementById('rc-customer-addr').value = data.customerAddr||'';
+  document.getElementById('rc-customer-phone').value = data.customerPhone||'';
+  document.getElementById('rc-tracking').value = data.tracking||'';
+  document.getElementById('rc-platform').value = data.platform||'';
+  document.getElementById('rc-platform-fee').value = data.platformFee||0;
+  document.getElementById('rc-shipping').value = data.shipping||0;
+  document.getElementById('rc-discount').value = data.discount||0;
+  document.getElementById('rc-vat').value = data.vat||0;
+  document.getElementById('rc-note').value = data.note||'';
   document.getElementById('receipt-modal-overlay').classList.add('open');
+  liveUpdateReceipt();
+}
+
+function getReceiptExtras() {
+  return {
+    customerName:  document.getElementById('rc-customer-name').value.trim(),
+    customerAddr:  document.getElementById('rc-customer-addr').value.trim(),
+    customerPhone: document.getElementById('rc-customer-phone').value.trim(),
+    tracking:      document.getElementById('rc-tracking').value.trim(),
+    platform:      document.getElementById('rc-platform').value,
+    platformFee:   parseFloat(document.getElementById('rc-platform-fee').value)||0,
+    shipping:      parseFloat(document.getElementById('rc-shipping').value)||0,
+    discount:      parseFloat(document.getElementById('rc-discount').value)||0,
+    vat:           parseFloat(document.getElementById('rc-vat').value)||0,
+    note:          document.getElementById('rc-note').value.trim(),
+  };
+}
+
+function liveUpdateReceipt() {
+  if(!lastReceiptData) return;
+  const extras = getReceiptExtras();
+  const merged = {...lastReceiptData, ...extras};
+  document.getElementById('receipt-content').innerHTML = buildReceiptHTML(merged);
+  // Show/hide save GP button
+  const btn = document.getElementById('btn-save-platform-fee');
+  if(btn) btn.style.display = extras.platform && extras.platformFee>0 ? 'flex' : 'none';
+}
+
+function savePlatformFeeAsExpense() {
+  if(!lastReceiptData) return;
+  const extras = getReceiptExtras();
+  if(!extras.platform || !extras.platformFee) return;
+  const gpAmount = Math.round(lastReceiptData.totalPrice * extras.platformFee / 100);
+  expenses.unshift({
+    id: 'EXP'+Date.now(),
+    date: new Date().toISOString().slice(0,10),
+    cat: 'ค่าแฟลตฟอร์ม',
+    name: `ค่า GP ${extras.platform} (${extras.platformFee}%) - ${lastReceiptData.no}`,
+    amount: gpAmount,
+    note: `ยอดขาย ฿${fmtNum(lastReceiptData.totalPrice)}`
+  });
+  saveExpenses();
+  toast(`บันทึกค่า GP ${extras.platform} ฿${fmtNum(gpAmount)} แล้ว`);
 }
 
 function closeReceiptModal() {
@@ -1161,8 +1319,10 @@ function closeReceiptModal() {
 
 function printReceipt() {
   if(!lastReceiptData) return;
-  const html = buildReceiptHTML(lastReceiptData, true);
-  const win = window.open('', '_blank', 'width=420,height=700');
+  const extras = getReceiptExtras();
+  const merged = {...lastReceiptData, ...extras};
+  const html = buildReceiptHTML(merged, true);
+  const win = window.open('', '_blank', 'width=420,height=750');
   win.document.write(`<!DOCTYPE html><html><head>
     <meta charset="UTF-8">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;600;700;800;900&display=swap" rel="stylesheet">
@@ -1612,40 +1772,209 @@ function quickRestock(id) {
 }
 
 // ---- Reports ----
-function renderReports() {
-  const totalVal = products.reduce((s,p)=>s+p.qty*p.cost,0);
-  const profit = products.reduce((s,p)=>s+p.qty*(p.price-p.cost),0);
-  const cats = [...new Set(products.map(p=>p.category))];
-  const topCat = cats.reduce((a,c)=>{
-    const n=products.filter(p=>p.category===c).length;
-    return n>a.n?{c,n}:a;
-  },{c:'-',n:0});
-  document.getElementById('rep-totalval').textContent = fmtNum(totalVal);
-  document.getElementById('rep-profit').textContent = fmtNum(profit);
-  document.getElementById('rep-topcat').textContent = topCat.c;
+// ============================
+// EXPENSES
+// ============================
+let expenses = JSON.parse(localStorage.getItem('stockpro_expenses') || '[]');
+let currentPeriod = 'today';
+let editExpenseId = null;
 
-  // Value chart
-  const catVals = cats.map(c=>({c,v:products.filter(p=>p.category===c).reduce((s,p)=>s+p.qty*p.cost,0)}));
-  const ctx = document.getElementById('chart-value').getContext('2d');
-  if(charts.value) charts.value.destroy();
-  charts.value = new Chart(ctx,{
-    type:'bar',
-    data:{labels:catVals.map(x=>x.c),datasets:[{label:'มูลค่า (บาท)',data:catVals.map(x=>x.v),backgroundColor:'#4f8ef7',borderRadius:6,borderWidth:0}]},
-    options:{plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#7a8299',font:{family:"'Noto Sans Thai'"}},grid:{display:false}},y:{ticks:{color:'#7a8299',font:{family:"'Noto Sans Thai'"},callback:v=>fmtNum(v)},grid:{color:'#2a3050'}}}}
+function saveExpenses() { localStorage.setItem('stockpro_expenses', JSON.stringify(expenses)); }
+
+function setPeriod(p) {
+  currentPeriod = p;
+  document.querySelectorAll('[id^="period-"]').forEach(el=>el.classList.remove('active'));
+  document.getElementById('period-'+p)?.classList.add('active');
+  renderReports();
+}
+
+function getDateRange() {
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0,10);
+  const monthStr = now.toISOString().slice(0,7);
+  if(currentPeriod==='today') return { label:'วันนี้', filter: d => d===todayStr };
+  if(currentPeriod==='month') return { label:'เดือนนี้', filter: d => d && d.startsWith(monthStr) };
+  return { label:'ทั้งหมด', filter: ()=>true };
+}
+
+function openExpenseModal(id=null) {
+  editExpenseId = id;
+  const e = id ? expenses.find(x=>x.id===id) : null;
+  document.getElementById('exp-date').value = e ? e.date : new Date().toISOString().slice(0,10);
+  document.getElementById('exp-cat').value = e ? e.cat : 'ค่าเช่า';
+  document.getElementById('exp-name').value = e ? e.name : '';
+  document.getElementById('exp-amount').value = e ? e.amount : '';
+  document.getElementById('exp-note').value = e ? (e.note||'') : '';
+  document.getElementById('expense-modal-overlay').classList.add('open');
+}
+
+function closeExpenseModal() { document.getElementById('expense-modal-overlay').classList.remove('open'); }
+
+function saveExpense() {
+  const date = document.getElementById('exp-date').value;
+  const cat = document.getElementById('exp-cat').value;
+  const name = document.getElementById('exp-name').value.trim();
+  const amount = parseFloat(document.getElementById('exp-amount').value)||0;
+  const note = document.getElementById('exp-note').value.trim();
+  if(!name||!amount) { toast('กรุณากรอกรายการและจำนวนเงิน','error'); return; }
+  if(editExpenseId) {
+    const e = expenses.find(x=>x.id===editExpenseId);
+    Object.assign(e,{date,cat,name,amount,note});
+  } else {
+    expenses.unshift({id:'EXP'+Date.now(), date, cat, name, amount, note});
+  }
+  saveExpenses(); closeExpenseModal(); renderReports();
+  toast(editExpenseId?'แก้ไขค่าใช้จ่ายแล้ว':'บันทึกค่าใช้จ่ายแล้ว');
+}
+
+function deleteExpense(id) {
+  if(!confirm('ลบรายการค่าใช้จ่ายนี้?')) return;
+  expenses = expenses.filter(x=>x.id!==id);
+  saveExpenses(); renderReports();
+  toast('ลบแล้ว');
+}
+
+function renderReports() {
+  const {label, filter} = getDateRange();
+  if(document.getElementById('expense-period-label'))
+    document.getElementById('expense-period-label').textContent = label;
+
+  // --- ยอดขายในช่วงเวลา (จาก saleHistory) ---
+  const todayStr = new Date().toISOString().slice(0,10);
+  const monthStr = new Date().toISOString().slice(0,7);
+  let filteredSales = saleHistory;
+  if(currentPeriod==='today') {
+    filteredSales = saleHistory.filter(s => {
+      if(s.receiptData) return s.receiptData.date.includes(new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'}).split(' ')[1]||'');
+      return true; // fallback: show all for today
+    });
+    // simpler: show all since saleHistory resets daily
+    filteredSales = saleHistory;
+  }
+
+  const revenue = filteredSales.reduce((s,x)=>s+Number(x.total||0),0);
+
+  // --- ต้นทุนสินค้าขาย (COGS) คำนวณจาก items ใน saleHistory ---
+  let cogs = 0;
+  filteredSales.forEach(s => {
+    if(s.receiptData && s.receiptData.items) {
+      s.receiptData.items.forEach(item => {
+        const p = products.find(x=>x.id===item.id);
+        if(p) cogs += (p.cost||0) * item.qty;
+      });
+    }
   });
 
-  document.getElementById('report-table').innerHTML = products.map(p=>{
-    const sv = p.qty*p.cost;
-    const gp = p.price-p.cost;
-    return `<tr>
-      <td style="font-family:var(--mono);color:var(--muted)">${p.id}</td>
-      <td>${p.name}</td><td>${p.category}</td>
-      <td style="font-family:var(--mono)">${p.qty}</td>
-      <td style="font-family:var(--mono)">${fmtNum(p.cost)}</td>
-      <td style="font-family:var(--mono)">${fmtNum(sv)}</td>
-      <td style="font-family:var(--mono);color:${gp>0?'var(--green)':'var(--red)'}">${fmtNum(gp)}</td>
-    </tr>`;
-  }).join('');
+  // --- ค่าใช้จ่ายอื่นๆ ---
+  const filteredExp = expenses.filter(e=>filter(e.date));
+  const totalExpenses = filteredExp.reduce((s,e)=>s+Number(e.amount||0),0);
+
+  const grossProfit = revenue - cogs;
+  const netProfit = grossProfit - totalExpenses;
+
+  // Update stat cards
+  document.getElementById('rep-revenue').textContent = fmtNum(revenue);
+  document.getElementById('rep-cogs').textContent = fmtNum(cogs);
+  document.getElementById('rep-expenses').textContent = fmtNum(totalExpenses);
+  document.getElementById('rep-gross').textContent = fmtNum(grossProfit);
+  document.getElementById('rep-gross').style.color = grossProfit>=0?'var(--green)':'var(--red)';
+  document.getElementById('rep-net').textContent = fmtNum(netProfit);
+  document.getElementById('rep-net').style.color = netProfit>=0?'var(--green)':'var(--red)';
+
+  // --- Expense table ---
+  const expTbody = document.getElementById('expense-table');
+  if(expTbody) {
+    expTbody.innerHTML = filteredExp.length ?
+      filteredExp.map(e=>`<tr>
+        <td style="font-family:var(--mono);font-size:12px">${e.date}</td>
+        <td style="font-weight:600">${e.name}</td>
+        <td><span class="badge badge-yellow">${e.cat}</span></td>
+        <td style="font-family:var(--mono);font-weight:700;color:var(--red)">฿${fmtNum(e.amount)}</td>
+        <td style="color:var(--text3);font-size:12px">${e.note||'—'}</td>
+        <td>
+          <button class="btn btn-outline btn-sm" onclick="openExpenseModal('${e.id}')">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteExpense('${e.id}')" style="margin-left:4px">🗑️</button>
+        </td>
+      </tr>`).join('') :
+      `<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">ไม่มีค่าใช้จ่ายในช่วงนี้</td></tr>`;
+  }
+
+  // --- Profit chart ---
+  const ctx1 = document.getElementById('chart-profit')?.getContext('2d');
+  if(ctx1) {
+    if(charts.profit) charts.profit.destroy();
+    charts.profit = new Chart(ctx1, {
+      type:'bar',
+      data:{
+        labels:['ยอดขาย','ต้นทุนสินค้า','ค่าใช้จ่าย','กำไรขั้นต้น','กำไรสุทธิ'],
+        datasets:[{
+          data:[revenue, cogs, totalExpenses, grossProfit, netProfit],
+          backgroundColor:['#5b8dee','#ef4444','#f59e0b',
+            grossProfit>=0?'#10b981':'#ef4444',
+            netProfit>=0?'#10b981':'#ef4444'],
+          borderWidth:0, borderRadius:4
+        }]
+      },
+      options:{plugins:{legend:{display:false}},scales:{
+        x:{ticks:{color:'var(--text3)',font:{family:"'Noto Sans Thai'",size:11}},grid:{display:false}},
+        y:{ticks:{color:'var(--text3)',callback:v=>fmtNum(v)},grid:{color:'var(--border)'}}
+      }}
+    });
+  }
+
+  // --- Expense by category chart ---
+  const catMap = {};
+  filteredExp.forEach(e=>{ catMap[e.cat]=(catMap[e.cat]||0)+e.amount; });
+  const ctx2 = document.getElementById('chart-expense-cat')?.getContext('2d');
+  if(ctx2) {
+    if(charts.expcat) charts.expcat.destroy();
+    if(Object.keys(catMap).length) {
+      charts.expcat = new Chart(ctx2,{
+        type:'doughnut',
+        data:{
+          labels:Object.keys(catMap),
+          datasets:[{data:Object.values(catMap),backgroundColor:['#5b8dee','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4','#ec4899'],borderWidth:0,hoverOffset:6}]
+        },
+        options:{plugins:{legend:{labels:{color:'var(--text)',font:{family:"'Noto Sans Thai'",size:12}}}},cutout:'60%'}
+      });
+    } else {
+      charts.expcat = new Chart(ctx2,{type:'doughnut',data:{labels:['ยังไม่มีค่าใช้จ่าย'],datasets:[{data:[1],backgroundColor:['var(--border)'],borderWidth:0}]},options:{plugins:{legend:{labels:{color:'var(--text3)'}}},cutout:'60%'}});
+    }
+  }
+
+  // --- Stock value chart ---
+  const cats = [...new Set(products.map(p=>p.category))];
+  const catVals = cats.map(c=>({c,v:products.filter(p=>p.category===c).reduce((s,p)=>s+p.qty*p.cost,0)}));
+  const ctx3 = document.getElementById('chart-value')?.getContext('2d');
+  if(ctx3) {
+    if(charts.value) charts.value.destroy();
+    charts.value = new Chart(ctx3,{
+      type:'bar',
+      data:{labels:catVals.map(x=>x.c),datasets:[{label:'มูลค่า (บาท)',data:catVals.map(x=>x.v),backgroundColor:'#5b8dee',borderRadius:4,borderWidth:0}]},
+      options:{plugins:{legend:{display:false}},scales:{
+        x:{ticks:{color:'var(--text3)',font:{family:"'Noto Sans Thai'"}},grid:{display:false}},
+        y:{ticks:{color:'var(--text3)',callback:v=>fmtNum(v)},grid:{color:'var(--border)'}}
+      }}
+    });
+  }
+
+  // --- Product table ---
+  const repTbody = document.getElementById('report-table');
+  if(repTbody) {
+    repTbody.innerHTML = products.map(p=>{
+      const sv = p.qty*p.cost;
+      const gp = p.price-p.cost;
+      return `<tr>
+        <td style="font-family:var(--mono);color:var(--text3)">${p.id}</td>
+        <td>${p.name}</td><td>${p.category}</td>
+        <td style="font-family:var(--mono)">${p.qty}</td>
+        <td style="font-family:var(--mono)">฿${fmtNum(p.cost)}</td>
+        <td style="font-family:var(--mono)">฿${fmtNum(p.price)}</td>
+        <td style="font-family:var(--mono);color:${gp>0?'var(--green)':'var(--red)'};font-weight:700">฿${fmtNum(gp)}</td>
+        <td style="font-family:var(--mono)">฿${fmtNum(sv)}</td>
+      </tr>`;
+    }).join('');
+  }
 }
 
 // ---- Modal ----
@@ -2466,16 +2795,135 @@ if(getSheetsUrl()) setSyncDot('ok');
 
 <!-- Receipt Modal -->
 <div class="modal-overlay" id="receipt-modal-overlay" onclick="if(event.target===this)closeReceiptModal()">
-  <div class="modal" style="width:420px;max-height:90vh;overflow-y:auto;padding:0">
-    <!-- Receipt Preview -->
-    <div id="receipt-content" style="padding:32px;background:#fff;color:#111;font-family:'Noto Sans Thai',sans-serif">
-      <!-- Generated by JS -->
+  <div class="modal" style="width:760px;max-height:92vh;overflow-y:auto;padding:0;display:grid;grid-template-columns:1fr 1fr">
+
+    <!-- Left: Edit Panel -->
+    <div style="padding:24px;border-right:1px solid var(--border);overflow-y:auto;background:var(--surface)">
+      <div style="font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;margin-bottom:18px">✏️ แก้ไขใบเสร็จ</div>
+
+      <!-- Customer info -->
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">ข้อมูลลูกค้า</div>
+      <div class="form-group">
+        <label class="form-label">ชื่อลูกค้า</label>
+        <input class="form-input" id="rc-customer-name" placeholder="ชื่อ-นามสกุล" oninput="liveUpdateReceipt()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">ที่อยู่</label>
+        <textarea class="form-input" id="rc-customer-addr" placeholder="บ้านเลขที่ ถนน แขวง เขต จังหวัด รหัสไปรษณีย์" rows="3" style="resize:vertical" oninput="liveUpdateReceipt()"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">เบอร์โทรลูกค้า</label>
+          <input class="form-input" id="rc-customer-phone" placeholder="08x-xxx-xxxx" oninput="liveUpdateReceipt()">
+        </div>
+        <div class="form-group">
+          <label class="form-label">เลขพัสดุ/อ้างอิง</label>
+          <input class="form-input" id="rc-tracking" placeholder="TH123456789" oninput="liveUpdateReceipt()">
+        </div>
+      </div>
+
+      <!-- Platform fee -->
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin:16px 0 10px">ค่าแฟลตฟอร์ม</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">แฟลตฟอร์ม</label>
+          <select class="form-select" id="rc-platform" onchange="liveUpdateReceipt()">
+            <option value="">— ไม่มี —</option>
+            <option value="Shopee">Shopee</option>
+            <option value="Lazada">Lazada</option>
+            <option value="TikTok Shop">TikTok Shop</option>
+            <option value="LINE Shopping">LINE Shopping</option>
+            <option value="Facebook">Facebook</option>
+            <option value="หน้าร้าน">หน้าร้าน</option>
+            <option value="อื่นๆ">อื่นๆ</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">ค่า GP / ค่าธรรมเนียม (%)</label>
+          <input class="form-input" id="rc-platform-fee" type="number" min="0" max="100" step="0.1" placeholder="0" value="0" oninput="liveUpdateReceipt()">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">ค่าส่ง (บาท)</label>
+        <input class="form-input" id="rc-shipping" type="number" min="0" placeholder="0" value="0" oninput="liveUpdateReceipt()">
+      </div>
+
+      <!-- Discount -->
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin:16px 0 10px">ส่วนลด & หมายเหตุ</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">ส่วนลด (บาท)</label>
+          <input class="form-input" id="rc-discount" type="number" min="0" placeholder="0" value="0" oninput="liveUpdateReceipt()">
+        </div>
+        <div class="form-group">
+          <label class="form-label">VAT (%)</label>
+          <input class="form-input" id="rc-vat" type="number" min="0" max="100" step="0.1" placeholder="0" value="0" oninput="liveUpdateReceipt()">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">หมายเหตุ</label>
+        <input class="form-input" id="rc-note" placeholder="หมายเหตุในใบเสร็จ" oninput="liveUpdateReceipt()">
+      </div>
     </div>
-    <!-- Actions -->
-    <div style="padding:16px 20px;border-top:1px solid #e8e8e8;display:flex;gap:10px;background:var(--surface)">
-      <button class="btn btn-outline" onclick="closeReceiptModal()" style="flex:1;justify-content:center">✕ ปิด</button>
-      <button class="btn btn-primary" onclick="printReceipt()" style="flex:1;justify-content:center">🖨️ ปริ้น</button>
-      <button class="btn btn-primary" onclick="downloadReceiptPDF()" style="flex:1;justify-content:center">⬇️ PDF</button>
+
+    <!-- Right: Preview -->
+    <div style="background:#f5f5f5;display:flex;flex-direction:column">
+      <div style="padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">👁️ ตัวอย่างใบเสร็จ</div>
+      <div style="flex:1;overflow-y:auto;padding:16px">
+        <div id="receipt-content" style="background:#fff;padding:28px;font-family:'Noto Sans Thai',sans-serif;color:#111;box-shadow:0 2px 12px rgba(0,0,0,.1)">
+          <!-- Generated by JS -->
+        </div>
+      </div>
+      <!-- Actions -->
+      <div style="padding:14px 16px;border-top:1px solid var(--border);display:flex;gap:8px;background:var(--surface);flex-wrap:wrap">
+        <button class="btn btn-outline btn-sm" onclick="closeReceiptModal()" style="flex:1;justify-content:center">✕ ปิด</button>
+        <button class="btn btn-primary btn-sm" onclick="printReceipt()" style="flex:1;justify-content:center">🖨️ ปริ้น</button>
+        <button class="btn btn-primary btn-sm" onclick="downloadReceiptPDF()" style="flex:1;justify-content:center">⬇️ PDF</button>
+        <button class="btn btn-green btn-sm" onclick="savePlatformFeeAsExpense()" style="flex:1;justify-content:center" id="btn-save-platform-fee" style="display:none">💾 บันทึกค่า GP</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Expense Modal -->
+<div class="modal-overlay" id="expense-modal-overlay" onclick="if(event.target===this)closeExpenseModal()">
+  <div class="modal" style="width:460px">
+    <div class="modal-title">บันทึกค่าใช้จ่าย</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">วันที่</label>
+        <input class="form-input" id="exp-date" type="date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">หมวดหมู่</label>
+        <select class="form-select" id="exp-cat">
+          <option>ค่าเช่า</option>
+          <option>ค่าไฟ/น้ำ</option>
+          <option>ค่าแรง</option>
+          <option>ค่าขนส่ง</option>
+          <option>ค่าแฟลตฟอร์ม</option>
+          <option>ค่าการตลาด</option>
+          <option>ค่าบรรจุภัณฑ์</option>
+          <option>อื่นๆ</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">รายการ</label>
+      <input class="form-input" id="exp-name" placeholder="เช่น ค่าเช่าร้านเดือนมิถุนายน">
+    </div>
+    <div class="form-group">
+      <label class="form-label">จำนวนเงิน (บาท)</label>
+      <input class="form-input" id="exp-amount" type="number" min="0" placeholder="0">
+    </div>
+    <div class="form-group">
+      <label class="form-label">หมายเหตุ</label>
+      <input class="form-input" id="exp-note" placeholder="(ถ้ามี)">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeExpenseModal()">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="saveExpense()">💾 บันทึก</button>
     </div>
   </div>
 </div>
