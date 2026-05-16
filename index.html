@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 /* ============================================================
    STOCKPRO — Wix-Style Clean Minimal UI v3.0
@@ -645,9 +646,9 @@ tbody td { padding: 13px 18px; font-size: 13px; }
       <div style="font-size:14px;font-weight:600;margin-bottom:10px">📋 ประวัติการขายวันนี้</div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>เวลา</th><th>รายการ</th><th>จำนวน</th><th>ยอดรวม</th><th>ผู้ขาย</th></tr></thead>
+          <thead><tr><th>เวลา</th><th>รายการ</th><th>จำนวน</th><th>ยอดรวม</th><th>ผู้ขาย</th><th>ใบเสร็จ</th></tr></thead>
           <tbody id="sale-history-table">
-            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">ยังไม่มีรายการขาย</td></tr>
+            <tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">ยังไม่มีรายการขาย</td></tr>
           </tbody>
         </table>
       </div>
@@ -1007,51 +1008,334 @@ function cartRemove(i) { cart.splice(i,1); renderCart(); }
 function clearCart() { cart=[]; renderCart(); document.getElementById('scan-status').innerHTML=''; }
 
 // ---- Checkout ----
+// ---- Store settings for receipt ----
+let storeSettings = JSON.parse(localStorage.getItem('stockpro_store') || 'null') || {
+  name: 'ร้านของฉัน',
+  address: 'ที่อยู่ร้าน',
+  phone: '08x-xxx-xxxx',
+  taxId: '',
+  thankMsg: 'ขอบคุณที่ใช้บริการ'
+};
+function saveStoreSettings() { localStorage.setItem('stockpro_store', JSON.stringify(storeSettings)); }
+
+let lastReceiptData = null;
+
 function checkout() {
   if(cart.length===0) return;
   const totalItems = cart.reduce((s,c)=>s+c.qty,0);
   const totalPrice = cart.reduce((s,c)=>s+c.qty*c.product.price,0);
+  const receiptNo = 'RCP-' + Date.now().toString().slice(-8);
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'});
+  const timeStr = now.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
+  // Build receipt data
+  lastReceiptData = {
+    no: receiptNo,
+    date: dateStr,
+    time: timeStr,
+    items: cart.map(c=>({
+      name: c.product.name,
+      id: c.product.id,
+      qty: c.qty,
+      price: c.product.price,
+      subtotal: c.qty * c.product.price
+    })),
+    totalItems,
+    totalPrice,
+    seller: currentUser ? currentUser.name : 'แคชเชียร์'
+  };
+
   // Deduct stock
   cart.forEach(c=>{ c.product.qty -= c.qty; });
   save();
+
   // Save to history
   const entry = {
-    time: new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}),
+    time: timeStr,
     items: cart.map(c=>`${c.product.name} x${c.qty}`).join(', '),
     qty: totalItems,
     total: totalPrice,
-    seller: 'แคชเชียร์'
+    seller: lastReceiptData.seller,
+    receiptData: lastReceiptData
   };
   saleHistory.unshift(entry);
   localStorage.setItem('stockpro_sales_today', JSON.stringify(saleHistory.slice(0,100)));
-  // Feedback
-  toast(`ชำระเงินสำเร็จ ฿${fmtNum(totalPrice)} (${totalItems} ชิ้น)`);
+
   // Check low stock warnings
   const warnings = cart.filter(c=>c.product.qty<=c.product.reorder);
-  if(warnings.length) {
-    setTimeout(()=>toast(`⚠️ สินค้าใกล้หมด: ${warnings.map(c=>c.product.name).join(', ')}`, 'warn'), 800);
-  }
+
   clearCart();
   renderSaleHistory();
   renderDashboard();
   updateAlertBadge();
   triggerAutoSync();
+
+  // Show receipt
+  showReceipt(lastReceiptData);
+
+  if(warnings.length) {
+    setTimeout(()=>toast(`⚠️ สินค้าใกล้หมด: ${warnings.map(c=>c.product.name).join(', ')}`, 'warn'), 1200);
+  }
+}
+
+// ---- Receipt functions ----
+function buildReceiptHTML(data, forPrint=false) {
+  const s = storeSettings;
+  const lineH = forPrint ? '' : '';
+  return `
+  <div style="font-family:'Noto Sans Thai',sans-serif;color:#111;max-width:380px;margin:0 auto;${forPrint?'padding:0':''}">
+    <!-- Header -->
+    <div style="text-align:center;padding-bottom:16px;border-bottom:2px solid #111;margin-bottom:16px">
+      <div style="font-size:22px;font-weight:900;letter-spacing:-0.5px;text-transform:uppercase">${s.name}</div>
+      ${s.address?`<div style="font-size:12px;color:#555;margin-top:3px">${s.address}</div>`:''}
+      ${s.phone?`<div style="font-size:12px;color:#555">โทร: ${s.phone}</div>`:''}
+      ${s.taxId?`<div style="font-size:12px;color:#555">เลขผู้เสียภาษี: ${s.taxId}</div>`:''}
+      <div style="font-size:14px;font-weight:700;margin-top:10px;text-transform:uppercase;letter-spacing:2px">ใบเสร็จรับเงิน</div>
+    </div>
+
+    <!-- Receipt Info -->
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:#555;margin-bottom:16px">
+      <div>
+        <div>เลขที่: <strong style="color:#111;font-family:monospace">${data.no}</strong></div>
+        <div>ผู้ขาย: <strong style="color:#111">${data.seller}</strong></div>
+      </div>
+      <div style="text-align:right">
+        <div>${data.date}</div>
+        <div>${data.time}</div>
+      </div>
+    </div>
+
+    <!-- Items -->
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
+      <thead>
+        <tr style="border-bottom:1px solid #111">
+          <th style="text-align:left;padding:6px 0;font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:800">รายการ</th>
+          <th style="text-align:center;padding:6px 0;font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:800">จำนวน</th>
+          <th style="text-align:right;padding:6px 0;font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:800">ราคา</th>
+          <th style="text-align:right;padding:6px 0;font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:800">รวม</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${data.items.map(item=>`
+          <tr style="border-bottom:1px solid #eee">
+            <td style="padding:8px 0">
+              <div style="font-weight:600">${item.name}</div>
+              <div style="font-size:11px;color:#888;font-family:monospace">${item.id}</div>
+            </td>
+            <td style="text-align:center;padding:8px 0;font-family:monospace">${item.qty}</td>
+            <td style="text-align:right;padding:8px 0;font-family:monospace">${fmtNum(item.price)}</td>
+            <td style="text-align:right;padding:8px 0;font-family:monospace;font-weight:700">${fmtNum(item.subtotal)}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+
+    <!-- Total -->
+    <div style="border-top:2px solid #111;padding-top:12px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;font-size:13px;color:#555;margin-bottom:4px">
+        <span>จำนวนสินค้า</span>
+        <span style="font-family:monospace">${data.totalItems} ชิ้น</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:20px;font-weight:900;margin-top:8px">
+        <span style="text-transform:uppercase;letter-spacing:-.3px">ยอดรวม</span>
+        <span style="font-family:monospace">฿${fmtNum(data.totalPrice)}</span>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="text-align:center;border-top:1px solid #ddd;padding-top:14px">
+      <div style="font-size:14px;font-weight:700">${s.thankMsg}</div>
+      <div style="font-size:11px;color:#999;margin-top:4px">${data.no}</div>
+    </div>
+  </div>`;
+}
+
+function showReceipt(data) {
+  document.getElementById('receipt-content').innerHTML = buildReceiptHTML(data);
+  document.getElementById('receipt-modal-overlay').classList.add('open');
+}
+
+function closeReceiptModal() {
+  document.getElementById('receipt-modal-overlay').classList.remove('open');
+}
+
+function printReceipt() {
+  if(!lastReceiptData) return;
+  const html = buildReceiptHTML(lastReceiptData, true);
+  const win = window.open('', '_blank', 'width=420,height=700');
+  win.document.write(`<!DOCTYPE html><html><head>
+    <meta charset="UTF-8">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+      * { margin:0;padding:0;box-sizing:border-box; }
+      body { padding:20px; background:#fff; }
+      @media print { body { padding:0; } }
+    </style>
+  </head><body>${html}
+    <script>window.onload=()=>{window.print();window.close();}<\/script>
+  </body></html>`);
+  win.document.close();
+}
+
+async function downloadReceiptPDF() {
+  if(!lastReceiptData) return;
+  toast('กำลังสร้าง PDF...');
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
+
+    // Load Thai font via canvas workaround — use built-in with latin fallback
+    const s = storeSettings;
+    const d = lastReceiptData;
+    const pageW = 210;
+    const margin = 20;
+    const contentW = pageW - margin*2;
+    let y = 20;
+
+    // Header
+    doc.setFontSize(18); doc.setFont('helvetica','bold');
+    doc.text(s.name, pageW/2, y, {align:'center'}); y+=8;
+    doc.setFontSize(10); doc.setFont('helvetica','normal');
+    if(s.address) { doc.text(s.address, pageW/2, y, {align:'center'}); y+=5; }
+    if(s.phone) { doc.text('Tel: '+s.phone, pageW/2, y, {align:'center'}); y+=5; }
+    if(s.taxId) { doc.text('Tax ID: '+s.taxId, pageW/2, y, {align:'center'}); y+=5; }
+    y+=3;
+    doc.setLineWidth(.5); doc.line(margin, y, pageW-margin, y); y+=6;
+    doc.setFontSize(13); doc.setFont('helvetica','bold');
+    doc.text('RECEIPT', pageW/2, y, {align:'center'}); y+=8;
+
+    // Info
+    doc.setFontSize(9); doc.setFont('helvetica','normal');
+    doc.text('No: '+d.no, margin, y);
+    doc.text(d.date+' '+d.time, pageW-margin, y, {align:'right'}); y+=5;
+    doc.text('Seller: '+d.seller, margin, y); y+=6;
+
+    // Line
+    doc.setLineWidth(.3); doc.line(margin, y, pageW-margin, y); y+=5;
+
+    // Items header
+    doc.setFontSize(9); doc.setFont('helvetica','bold');
+    doc.text('Item', margin, y);
+    doc.text('Qty', margin+100, y, {align:'center'});
+    doc.text('Price', margin+130, y, {align:'right'});
+    doc.text('Total', pageW-margin, y, {align:'right'}); y+=4;
+    doc.setLineWidth(.2); doc.line(margin, y, pageW-margin, y); y+=5;
+
+    // Items
+    doc.setFont('helvetica','normal');
+    d.items.forEach(item => {
+      const name = item.name.length > 28 ? item.name.substring(0,28)+'...' : item.name;
+      doc.text(name, margin, y);
+      doc.text(String(item.qty), margin+100, y, {align:'center'});
+      doc.text(fmtNum(item.price), margin+130, y, {align:'right'});
+      doc.text(fmtNum(item.subtotal), pageW-margin, y, {align:'right'});
+      y+=6;
+    });
+
+    // Total
+    y+=2; doc.setLineWidth(.5); doc.line(margin, y, pageW-margin, y); y+=6;
+    doc.setFont('helvetica','normal'); doc.setFontSize(9);
+    doc.text('Items: '+d.totalItems+' pcs', margin, y);
+    doc.setFont('helvetica','bold'); doc.setFontSize(14);
+    doc.text('TOTAL  B'+fmtNum(d.totalPrice), pageW-margin, y, {align:'right'}); y+=12;
+
+    // Footer
+    doc.setLineWidth(.2); doc.line(margin, y, pageW-margin, y); y+=6;
+    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    doc.text(s.thankMsg, pageW/2, y, {align:'center'}); y+=5;
+    doc.setFontSize(8); doc.setTextColor(150);
+    doc.text(d.no, pageW/2, y, {align:'center'});
+
+    doc.save(`receipt_${d.no}.pdf`);
+    toast('ดาวน์โหลด PDF สำเร็จ');
+  } catch(e) {
+    toast('สร้าง PDF ไม่ได้: '+e.message, 'error');
+    console.error(e);
+  }
+}
+
+// ---- Store settings (in profile/settings page) ----
+function renderStoreSettings() {
+  const s = storeSettings;
+  return `
+  <div class="chart-card" style="margin-top:20px">
+    <div class="chart-title">🏪 ข้อมูลร้านค้า (แสดงในใบเสร็จ)</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">ชื่อร้าน</label>
+        <input class="form-input" id="store-name" value="${s.name}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">เบอร์โทร</label>
+        <input class="form-input" id="store-phone" value="${s.phone||''}">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">ที่อยู่</label>
+      <input class="form-input" id="store-address" value="${s.address||''}">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">เลขผู้เสียภาษี (ถ้ามี)</label>
+        <input class="form-input" id="store-taxid" value="${s.taxId||''}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">ข้อความท้ายใบเสร็จ</label>
+        <input class="form-input" id="store-thanks" value="${s.thankMsg||'ขอบคุณที่ใช้บริการ'}">
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="saveStoreInfo()" style="margin-top:4px">💾 บันทึกข้อมูลร้าน</button>
+    <button class="btn btn-outline" onclick="previewLastReceipt()" style="margin-top:4px;margin-left:8px">🧾 ดูตัวอย่างใบเสร็จ</button>
+  </div>`;
+}
+
+function saveStoreInfo() {
+  storeSettings.name    = document.getElementById('store-name').value.trim() || 'ร้านของฉัน';
+  storeSettings.phone   = document.getElementById('store-phone').value.trim();
+  storeSettings.address = document.getElementById('store-address').value.trim();
+  storeSettings.taxId   = document.getElementById('store-taxid').value.trim();
+  storeSettings.thankMsg= document.getElementById('store-thanks').value.trim() || 'ขอบคุณที่ใช้บริการ';
+  saveStoreSettings();
+  toast('บันทึกข้อมูลร้านเรียบร้อย');
+}
+
+function previewLastReceipt() {
+  const demoData = lastReceiptData || {
+    no: 'RCP-DEMO0001',
+    date: new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'}),
+    time: new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),
+    items: [
+      {name:'สินค้าตัวอย่าง A', id:'P001', qty:2, price:350, subtotal:700},
+      {name:'สินค้าตัวอย่าง B', id:'P002', qty:1, price:490, subtotal:490},
+    ],
+    totalItems: 3,
+    totalPrice: 1190,
+    seller: currentUser ? currentUser.name : 'แคชเชียร์'
+  };
+  lastReceiptData = lastReceiptData || demoData;
+  showReceipt(demoData);
 }
 
 function renderSaleHistory() {
   const tbody = document.getElementById('sale-history-table');
   if(!tbody) return;
   if(saleHistory.length===0) {
-    tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">ยังไม่มีรายการขาย</td></tr>';
+    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">ยังไม่มีรายการขาย</td></tr>';
     return;
   }
-  tbody.innerHTML = saleHistory.map(s=>`<tr>
-    <td style="font-family:var(--mono);color:var(--muted)">${s.time}</td>
+  tbody.innerHTML = saleHistory.map((s,i)=>`<tr>
+    <td style="font-family:var(--mono);color:var(--text3);font-size:12px">${s.time}</td>
     <td style="font-size:12px">${s.items}</td>
     <td style="font-family:var(--mono)">${s.qty} ชิ้น</td>
-    <td style="font-family:var(--mono);color:var(--green)">฿${fmtNum(s.total)}</td>
-    <td style="color:var(--muted)">${s.seller}</td>
+    <td style="font-family:var(--mono);color:var(--green);font-weight:700">฿${fmtNum(s.total)}</td>
+    <td style="color:var(--text3)">${s.seller}</td>
+    <td>${s.receiptData?`<button class="btn btn-outline btn-sm" onclick="showReceiptByIndex(${i})">🧾</button>`:'—'}</td>
   </tr>`).join('');
+}
+
+function showReceiptByIndex(i) {
+  const s = saleHistory[i];
+  if(s && s.receiptData) { lastReceiptData = s.receiptData; showReceipt(s.receiptData); }
 }
 
 // ---- POS Product Search ----
@@ -1503,19 +1787,64 @@ let currentUser = null;
 
 function saveUsers() { localStorage.setItem('stockpro_users', JSON.stringify(users)); }
 
-function doLogin() {
+async function doLogin() {
   const u = document.getElementById('login-user').value.trim();
   const p = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('login-error');
+  const btn = document.querySelector('#login-screen .login-btn');
+
+  // ถ้ามี Sheets URL — ดึงข้อมูลล่าสุดก่อน login
+  if(getSheetsUrl()) {
+    btn.textContent = '⏳ กำลังดึงข้อมูล...';
+    btn.disabled = true;
+    try {
+      const data = await sheetsAPI('syncAll');
+      // อัปเดต users จาก Sheets
+      if(data.users && data.users.length) {
+        users = data.users.map(x=>({
+          id:x.id||'', username:x.username||'', password:x.password||'',
+          name:x.name||'', role:x.role||'cashier',
+          email:x.email||'', phone:x.phone||'',
+          color:x.color||'#4f8ef7', avatar:x.avatar||''
+        }));
+        saveUsers();
+      }
+      // อัปเดต products จาก Sheets
+      if(data.products && data.products.length) {
+        products = data.products.map(x=>({
+          id:x.id||'', name:x.name||'', category:x.category||'',
+          qty:Number(x.qty)||0, reorder:Number(x.reorder)||0,
+          cost:Number(x.cost)||0, price:Number(x.price)||0,
+          barcode:x.barcode||'', image:x.image||''
+        }));
+        save();
+      }
+      setSyncDot('ok');
+    } catch(e) {
+      // ถ้าดึงไม่ได้ ใช้ข้อมูลในเครื่องแทน
+      console.warn('ดึงข้อมูลจาก Sheets ไม่ได้:', e.message);
+      setSyncDot('error');
+    }
+    btn.textContent = 'เข้าสู่ระบบ';
+    btn.disabled = false;
+  }
+
+  // ตรวจสอบ username/password
   const found = users.find(x=>x.username===u && x.password===p);
   if(!found) {
-    document.getElementById('login-error').textContent = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
-    document.getElementById('login-error').style.display='block';
+    errEl.textContent = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
+    errEl.style.display='block';
     return;
   }
+  errEl.style.display='none';
   currentUser = found;
   document.getElementById('login-screen').style.display='none';
   updateSidebarUser();
+  renderDashboard();
+  renderCatFilters();
+  updateAlertBadge();
   showPage('pos');
+  toast('ยินดีต้อนรับ ' + found.name + ' 👋');
 }
 
 function doLogout() {
@@ -1605,7 +1934,8 @@ function renderProfilePage() {
       <button class="btn btn-primary" onclick="changePassword()" style="width:100%;justify-content:center;margin-top:4px">🔒 เปลี่ยนรหัสผ่าน</button>
       <div id="pf-pw-msg" style="margin-top:10px;font-size:13px"></div>
     </div>
-  </div>`;
+  </div>
+  ${renderStoreSettings()}`;
 }
 
 function selectProfileColor(color) {
@@ -2130,6 +2460,22 @@ if(getSheetsUrl()) setSyncDot('ok');
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeUserModal()">ยกเลิก</button>
       <button class="btn btn-primary" onclick="saveUser()">💾 บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<!-- Receipt Modal -->
+<div class="modal-overlay" id="receipt-modal-overlay" onclick="if(event.target===this)closeReceiptModal()">
+  <div class="modal" style="width:420px;max-height:90vh;overflow-y:auto;padding:0">
+    <!-- Receipt Preview -->
+    <div id="receipt-content" style="padding:32px;background:#fff;color:#111;font-family:'Noto Sans Thai',sans-serif">
+      <!-- Generated by JS -->
+    </div>
+    <!-- Actions -->
+    <div style="padding:16px 20px;border-top:1px solid #e8e8e8;display:flex;gap:10px;background:var(--surface)">
+      <button class="btn btn-outline" onclick="closeReceiptModal()" style="flex:1;justify-content:center">✕ ปิด</button>
+      <button class="btn btn-primary" onclick="printReceipt()" style="flex:1;justify-content:center">🖨️ ปริ้น</button>
+      <button class="btn btn-primary" onclick="downloadReceiptPDF()" style="flex:1;justify-content:center">⬇️ PDF</button>
     </div>
   </div>
 </div>
